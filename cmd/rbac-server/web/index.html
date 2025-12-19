@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RBAC Analyzer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <h1>RBAC Analyzer</h1>
+      <p class="muted">Загрузи YAML (kubectl get roles,clusterroles,rolebindings,clusterrolebindings -A -o yaml)</p>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <div class="col">
+          <label class="label">RBAC YAML</label>
+          <input id="file" type="file" accept=".yaml,.yml,.txt" />
+        </div>
+
+        <div class="col small">
+          <label class="label">Namespace filter</label>
+          <input id="namespace" type="text" placeholder="например: kube-system" />
+        </div>
+
+        <div class="col tiny">
+          <label class="label">Danger only</label>
+          <div class="toggle">
+            <input id="dangerOnly" type="checkbox" />
+            <span>только опасные</span>
+          </div>
+        </div>
+
+        <div class="col tiny">
+          <button id="analyze" class="btn">Analyze</button>
+        </div>
+      </div>
+
+      <div id="status" class="status muted"></div>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h2>Results</h2>
+        <button id="download" class="btn secondary" disabled>Download JSON</button>
+      </div>
+      <div id="results" class="results muted">Нет данных</div>
+    </section>
+
+    <footer class="footer muted">
+      <span>RBAC Analyzer (Go)</span>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
