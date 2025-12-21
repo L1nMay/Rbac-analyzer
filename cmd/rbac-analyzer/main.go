@@ -11,19 +11,28 @@ import (
 )
 
 func main() {
-	inputDir := flag.String("input-dir", "./manifests", "Directory containing RBAC YAML manifests")
-	outputFormat := flag.String("output", "table", "Output format: table or json")
-	dangerOnly := flag.Bool("danger-only", false, "Show only dangerous roles")
-	namespaceFilter := flag.String("namespace", "", "Filter by namespace (empty for all)")
+	// === FLAGS ===
+	inputDir := flag.String("input-dir", "", "Directory with RBAC YAML manifests")
+	outputFmt := flag.String("output", "table", "Output format: table|json")
+	dangerOnly := flag.Bool("danger-only", false, "Show only dangerous permissions")
+	title := flag.String("title", "RBAC Analysis Report", "Report title")
 
 	flag.Parse()
 
-	data, err := loader.LoadFromDir(*inputDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to load RBAC data: %v\n", err)
+	// === VALIDATION ===
+	if *inputDir == "" {
+		fmt.Fprintln(os.Stderr, "error: -input-dir is required")
 		os.Exit(1)
 	}
 
+	// === LOAD RBAC ===
+	data, err := loader.LoadFromDir(*inputDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load error:", err)
+		os.Exit(1)
+	}
+
+	// === ANALYZE ===
 	subjectPerms := rbac.BuildSubjectPermissions(
 		data.Roles,
 		data.ClusterRoles,
@@ -31,24 +40,24 @@ func main() {
 		data.ClusterRoleBindings,
 	)
 
-	if len(subjectPerms) == 0 {
-		fmt.Println("No RBAC data found (no Roles/Bindings detected).")
-		return
-	}
-
-	switch *outputFormat {
+	// === OUTPUT ===
+	switch *outputFmt {
 	case "table":
-		if err := output.PrintTable(os.Stdout, subjectPerms, *dangerOnly, *namespaceFilter); err != nil {
-			fmt.Fprintf(os.Stderr, "error: failed to print table: %v\n", err)
-			os.Exit(1)
-		}
+		output.PrintTable(
+			os.Stdout,
+			subjectPerms,
+			*dangerOnly,
+			*title,
+		)
 	case "json":
-		if err := output.PrintJSON(os.Stdout, subjectPerms, *dangerOnly, *namespaceFilter); err != nil {
-			fmt.Fprintf(os.Stderr, "error: failed to print json: %v\n", err)
-			os.Exit(1)
-		}
+		output.PrintJSON(
+			os.Stdout,
+			subjectPerms,
+			*dangerOnly,
+			*title,
+		)
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown output format %q (use table or json)\n", *outputFormat)
+		fmt.Fprintln(os.Stderr, "unknown output format:", *outputFmt)
 		os.Exit(1)
 	}
 }

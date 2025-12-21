@@ -1,5 +1,45 @@
 services:
-  rbac-server:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: rbac
+      POSTGRES_PASSWORD: rbac
+      POSTGRES_DB: rbac
+#    ports:
+#      - "5432:5432"
+    volumes:
+      - rbac_pg:/var/lib/postgresql/data
+
+  migrate:
+    image: postgres:16
+    depends_on:
+      - db
+    environment:
+      PGPASSWORD: rbac
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint: ["/bin/bash","-lc"]
+    command: >
+      "until pg_isready -h db -U rbac; do sleep 1; done;
+       psql -h db -U rbac -d rbac -f /migrations/001_init.sql;
+       psql -h db -U rbac -d rbac -f /migrations/002_plans.sql;
+       echo migrations done"
+
+  app:
     build: .
+    depends_on:
+      - db
+      - migrate
+    environment:
+      APP_ADDR: ":8080"
+      DATABASE_URL: "postgres://rbac:rbac@db:5432/rbac?sslmode=disable"
+      JWT_SECRET: "change_me_in_prod"
+      BASE_URL: "http://localhost:8080"
+      CONTACT_EMAIL: "sales@example.com"
+      CONTACT_TG: "@your_tg"
+      CONTACT_SITE: "https://example.com"
     ports:
       - "8080:8080"
+
+volumes:
+  rbac_pg:
