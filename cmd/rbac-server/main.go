@@ -27,7 +27,7 @@ func main() {
 
 	st := store.New(pool)
 
-	// Static web handler (marketing + app) из embed FS
+	// Static web handler (marketing + auth + app) из embed FS
 	web := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveWeb(w, r)
 	})
@@ -49,7 +49,40 @@ func main() {
 func serveWeb(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 
-	// Маркетинговые маршруты
+	// favicon
+	if p == "/favicon.ico" {
+		serveEmbeddedFile(w, r, "web/favicon.svg")
+		return
+	}
+
+	// ---------- ADMIN ----------
+	if p == "/admin" || p == "/admin/" {
+		serveEmbeddedFile(w, r, "web/admin/login.html")
+		return
+	}
+
+	if p == "/admin/dashboard" {
+		serveEmbeddedFile(w, r, "web/admin/index.html")
+		return
+	}
+
+	if strings.HasPrefix(p, "/admin/") {
+		p = path.Clean(strings.TrimPrefix(p, "/"))
+		serveEmbeddedFile(w, r, "web/"+p)
+		return
+	}
+
+	// ---------- AUTH ----------
+	if p == "/login" {
+		serveEmbeddedFile(w, r, "web/auth/login.html")
+		return
+	}
+	if p == "/register" {
+		serveEmbeddedFile(w, r, "web/auth/register.html")
+		return
+	}
+
+	// ---------- MARKETING ----------
 	switch p {
 	case "/":
 		p = "web/marketing/index.html"
@@ -58,23 +91,22 @@ func serveWeb(w http.ResponseWriter, r *http.Request) {
 	case "/contact":
 		p = "web/marketing/contact.html"
 	default:
-		// App маршруты
+		// ---------- APP ----------
 		if strings.HasPrefix(p, "/app") {
 			if p == "/app" || p == "/app/" {
 				p = "web/app/index.html"
 			} else {
-				// /app/style.css -> web/app/style.css
-				p = path.Clean(strings.TrimPrefix(p, "/"))
-				p = "web/" + p
+				p = "web/" + path.Clean(strings.TrimPrefix(p, "/"))
 			}
 		} else {
-			// Статика (например: /marketing/site.css)
-			// /marketing/site.css -> web/marketing/site.css
-			p = path.Clean(strings.TrimPrefix(p, "/"))
-			p = "web/" + p
+			p = "web/" + path.Clean(strings.TrimPrefix(p, "/"))
 		}
 	}
 
+	serveEmbeddedFile(w, r, p)
+}
+
+func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, p string) {
 	// Защита от path traversal + гарантия префикса
 	if !strings.HasPrefix(p, "web/") {
 		http.NotFound(w, r)
@@ -97,7 +129,10 @@ func serveWeb(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(p, ".css"):
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	case strings.HasSuffix(p, ".svg"):
-		w.Header().Set("Content-Type", "image/svg+xml")
+
+	case p == "/admin" || p == "/admin/":
+		p = "web/admin/index.html"
+
 	default:
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}

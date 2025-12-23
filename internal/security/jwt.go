@@ -11,8 +11,9 @@ import (
 )
 
 type Claims struct {
-	Sub   string `json:"sub"` // user id
+	Sub   string `json:"sub"`
 	Email string `json:"email"`
+	Admin bool   `json:"admin"`
 	Exp   int64  `json:"exp"`
 }
 

@@ -26,7 +26,7 @@ type authResp struct {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -34,17 +34,19 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	var req registerReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
+
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || len(req.Password) < 8 {
 		http.Error(w, "email required and password >= 8", http.StatusBadRequest)
 		return
 	}
-	if req.OrgName == "" {
+	if strings.TrimSpace(req.OrgName) == "" {
 		req.OrgName = "My Organization"
 	}
 
@@ -69,10 +71,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	token, _ := security.SignJWT([]byte(s.Cfg.JWTSecret), security.Claims{
 		Sub:   u.ID,
 		Email: u.Email,
+		Admin: u.IsAdmin,
 		Exp:   time.Now().Add(7 * 24 * time.Hour).Unix(),
 	})
 
-	writeJSON(w, authResp{Token: token})
+	writeJSON(w, http.StatusOK, authResp{Token: token})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -80,11 +83,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	var req loginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
+
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" {
 		http.Error(w, "email required", http.StatusBadRequest)
@@ -104,15 +109,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	token, _ := security.SignJWT([]byte(s.Cfg.JWTSecret), security.Claims{
 		Sub:   u.ID,
 		Email: u.Email,
+		Admin: u.IsAdmin,
 		Exp:   time.Now().Add(7 * 24 * time.Hour).Unix(),
 	})
 
-	writeJSON(w, authResp{Token: token})
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
+	writeJSON(w, http.StatusOK, authResp{Token: token})
 }

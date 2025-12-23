@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>RBAC Risk App</title>
+  <title>RBAC Analyzer App</title>
+  <link rel="icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/app/style.css" />
 </head>
 <body>
@@ -13,27 +14,26 @@
         <a href="/" class="logo">RBAC<span>Risk</span></a>
         <span class="tag">Kubernetes Access Risk Management</span>
       </div>
+
       <nav class="nav">
         <a href="/">Marketing</a>
         <a href="/contact">Contact</a>
+
+        <!-- Profile button (top-right) -->
+        <button id="profileBtn" class="btn secondary navProfileBtn" title="Profile">
+          <span id="navAvatar" class="navAvatar" aria-hidden="true"></span>
+          <span class="navProfileText">Profile</span>
+        </button>
+
+        <button id="logoutBtn" class="btn secondary">Logout</button>
       </nav>
     </header>
 
     <main class="grid">
       <section class="card">
-        <h2>Account</h2>
-        <div class="row">
-          <input id="email" placeholder="email" />
-          <input id="password" type="password" placeholder="password (>= 8)" />
-        </div>
-        <div class="row">
-          <input id="orgName" placeholder="org name (register only)" />
-        </div>
-        <div class="row">
-          <button id="register" class="btn">Register</button>
-          <button id="login" class="btn secondary">Login</button>
-        </div>
-        <div id="authStatus" class="muted"></div>
+        <h2>Session</h2>
+        <div class="muted" id="meStatus">Checking session…</div>
+        <pre id="meBox" class="pre muted">No data</pre>
       </section>
 
       <section class="card">
@@ -52,9 +52,9 @@
 
       <section class="card span2">
         <div class="between">
-          <h2>Scan</h2>
+          <h2>RBAC Scan</h2>
           <div class="right">
-            <button id="loadScans" class="btn secondary">History</button>
+            <button id="loadScans" class="btn secondary">Reload history</button>
           </div>
         </div>
 
@@ -67,29 +67,101 @@
 
         <div class="split">
           <div class="panel">
-            <h3>Latest Summary</h3>
-            <pre id="summary" class="pre muted">No data</pre>
+            <div class="between">
+              <h3>Latest Summary</h3>
+              <div class="right">
+                <button id="clearSummary" class="btn secondary">Clear</button>
+              </div>
+            </div>
+            <pre id="summary" class="pre muted preBox">No data</pre>
           </div>
+
           <div class="panel">
-            <h3>Report</h3>
+            <div class="between">
+              <h3>Scan Report</h3>
+              <div class="right">
+                <button id="toggleReport" class="btn secondary">Toggle</button>
+                <button id="downloadReport" class="btn secondary">Download</button>
+                <button id="loadLatestReport" class="btn secondary">Load latest</button>
+              </div>
+            </div>
             <div class="row">
-              <input id="scanId" placeholder="scanId (from history)" />
+              <input id="scanId" placeholder="scanId (click from history)" />
               <button id="loadReport" class="btn secondary">Load</button>
             </div>
-            <pre id="report" class="pre muted">No data</pre>
+            <pre id="report" class="pre muted preBox preReport">No data</pre>
           </div>
         </div>
 
         <div class="panel">
-          <h3>Scan History</h3>
-          <pre id="history" class="pre muted">No data</pre>
+          <div class="between">
+            <h3>Scan History</h3>
+            <div class="right">
+              <span id="historyMeta" class="muted"></span>
+            </div>
+          </div>
+
+          <div class="tableWrap">
+            <table class="table" id="historyTable">
+              <thead>
+                <tr>
+                  <th style="width:140px;">Created</th>
+                  <th style="width:110px;">Source</th>
+                  <th>Scan ID</th>
+                  <th style="width:140px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody">
+                <tr>
+                  <td colspan="4" class="muted">No data</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="hint muted">
+            Tip: click a row to select scanId, then “Load report”.
+          </div>
         </div>
+
       </section>
     </main>
 
     <footer class="footer muted">
-      <span>RBACRisk — SaaS MVP</span>
+      <span>RBAC Risk — SaaS MVP</span>
     </footer>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" class="modal hidden" aria-hidden="true">
+    <div class="modalOverlay" id="profileOverlay"></div>
+    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <div class="between">
+        <h3 id="profileTitle">Profile</h3>
+        <button id="closeProfile" class="btn secondary">Close</button>
+      </div>
+
+      <div class="profileGrid">
+        <div class="profileAvatarBlock">
+          <div class="avatarBig" id="avatarBig"></div>
+          <div class="muted" style="margin-top:8px;">Avatar (stored locally in browser)</div>
+        </div>
+
+        <div class="profileFields">
+          <div class="row">
+            <input id="profileName" placeholder="Your name" />
+            <input id="profileSurame" placeholder="Your surname" />
+            <input id="profileBio" placeholder="Short bio" />
+            <input id="profileData" placeholder="Born data" />
+          </div>
+          <div class="row">
+            <input id="profileAvatar" type="file" accept="image/*" />
+            <button id="saveProfile" class="btn">Save</button>
+          </div>
+          <div id="profileStatus" class="muted"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="/app/app.js"></script>

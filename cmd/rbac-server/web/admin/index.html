@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>RBAC Risk — Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/admin/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="logo">RBAC<span>Admin</span></span>
+      </div>
+      <div class="right">
+        <span id="adminEmail" class="muted"></span>
+        <button id="logoutBtn" class="btn secondary">Logout</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <!-- USERS -->
+      <section class="card">
+        <h2>Users</h2>
+        <button id="reloadUsers" class="btn secondary">Reload</button>
+        <div class="tableWrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Admin</th>
+                <th>Created</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody">
+              <tr><td colspan="4" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ORGS -->
+      <section class="card">
+        <h2>Organizations</h2>
+        <button id="reloadOrgs" class="btn secondary">Reload</button>
+        <div class="tableWrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Owner</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="orgsBody">
+              <tr><td colspan="3" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

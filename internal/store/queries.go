@@ -13,6 +13,7 @@ type User struct {
 	ID           string
 	Email        string
 	PasswordHash string
+	IsAdmin      bool
 	CreatedAt    time.Time
 }
 
@@ -45,23 +46,80 @@ type Subscription struct {
 	StripeSubscriptionID string
 	CurrentPeriodEnd     *time.Time
 }
+type OrgAdminView struct {
+	OrgID       string
+	OrgName     string
+	OwnerEmail  string
+	PlanID      string
+	ClustersCnt int
+}
+
+func (s *Store) ListOrgsAdmin(ctx context.Context) ([]OrgAdminView, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT
+			o.id,
+			o.name,
+			u.email,
+			s.plan_id,
+			(SELECT COUNT(*) FROM clusters c WHERE c.org_id=o.id)
+		FROM orgs o
+		JOIN users u ON u.id=o.owner_user_id
+		JOIN subscriptions s ON s.org_id=o.id
+		ORDER BY o.created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []OrgAdminView
+	for rows.Next() {
+		var r OrgAdminView
+		if err := rows.Scan(&r.OrgID, &r.OrgName, &r.OwnerEmail, &r.PlanID, &r.ClustersCnt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetOrgPlan(ctx context.Context, orgID, planID string) error {
+	_, err := s.DB.Exec(ctx,
+		`UPDATE subscriptions SET plan_id=$1 WHERE org_id=$2`,
+		planID, orgID,
+	)
+	return err
+}
 
 func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
 	var u User
 	err := s.DB.QueryRow(ctx,
-		`INSERT INTO users(email, password_hash) VALUES($1,$2)
-		 RETURNING id, email, password_hash, created_at`,
+		`INSERT INTO users(email, password_hash)
+		 VALUES($1,$2)
+		 RETURNING id, email, password_hash, is_admin, created_at`,
 		email, passwordHash,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	).Scan(
+		&u.ID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.IsAdmin,
+		&u.CreatedAt,
+	)
 	return u, err
 }
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	var u User
 	err := s.DB.QueryRow(ctx,
-		`SELECT id, email, password_hash, created_at FROM users WHERE email=$1`,
+		`SELECT id, email, password_hash, is_admin, created_at FROM users WHERE email=$1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	).Scan(
+		&u.ID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.IsAdmin,
+		&u.CreatedAt,
+	)
 	return u, err
 }
 
@@ -234,4 +292,83 @@ func (s *Store) GetScanReport(ctx context.Context, scanID string) (map[string]an
 
 func IsNotFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
+}
+func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, email, password_hash, is_admin, created_at
+		 FROM users
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetUserAdmin(ctx context.Context, userID string, admin bool) error {
+	_, err := s.DB.Exec(ctx,
+		`UPDATE users SET is_admin=$1 WHERE id=$2`,
+		admin, userID,
+	)
+	return err
+}
+func (s *Store) ListAllUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, email, is_admin, created_at
+		 FROM users
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListAllOrgs(ctx context.Context) ([]Org, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, name FROM orgs ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Org
+	for rows.Next() {
+		var o Org
+		if err := rows.Scan(&o.ID, &o.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+func (s *Store) ToggleAdmin(ctx context.Context, userID string) error {
+	_, err := s.DB.Exec(ctx,
+		`UPDATE users
+		 SET is_admin = NOT is_admin
+		 WHERE id = $1`,
+		userID,
+	)
+	return err
 }

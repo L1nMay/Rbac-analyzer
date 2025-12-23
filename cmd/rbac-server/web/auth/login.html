@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login — RBAC Risk</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/auth/auth.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <a href="/" class="logo">RBAC <span>Risk</span></a>
+        <span class="tag">Kubernetes Access Risk Management</span>
+      </div>
+      <nav class="nav">
+        <a href="/">Marketing</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/contact">Contact</a>
+      </nav>
+    </header>
+
+    <div class="center">
+      <div class="card">
+        <h1>Sign in</h1>
+        <p>Enter your email and password to access the dashboard.</p>
+
+        <div class="row">
+          <input id="email" placeholder="email" autocomplete="email" />
+        </div>
+        <div class="row">
+          <input id="password" type="password" placeholder="password" autocomplete="current-password" />
+        </div>
+
+        <div class="row">
+          <button id="loginBtn" class="btn">Login</button>
+          <a class="btn secondary" href="/register">Create account</a>
+        </div>
+
+        <div id="status" class="muted"></div>
+
+        <div class="footer">
+          <span>RBAC Risk — SaaS MVP</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/auth/auth.js"></script>
+</body>
+</html>

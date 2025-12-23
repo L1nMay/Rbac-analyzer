@@ -1,148 +1,377 @@
-let token = localStorage.getItem("jwt") || "";
+async function api(url, opts = {}) {
+  opts.headers = opts.headers || {};
+  const token = localStorage.getItem("token");
+  if (token) opts.headers["Authorization"] = "Bearer " + token;
 
-const el = (id) => document.getElementById(id);
+  const r = await fetch(url, opts);
 
-function setText(id, t) { el(id).textContent = t; }
-function setJSON(id, obj) { el(id).textContent = JSON.stringify(obj, null, 2); }
-function authHeaders() { return token ? { "Authorization": `Bearer ${token}` } : {}; }
-
-async function api(path, opts = {}) {
-  const res = await fetch(path, opts);
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status}`);
+  // если сессия протухла / нет токена
+  if (r.status === 401) {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+    return;
   }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  return res.text();
+
+  if (!r.ok) throw new Error(await r.text());
+  return r.status === 204 ? null : r.json();
 }
 
-function setAuthStatus(msg) { setText("authStatus", msg); }
-function setClusterStatus(msg) { setText("clusterStatus", msg); }
-function setScanStatus(msg) { setText("scanStatus", msg); }
-
-async function register() {
-  const email = el("email").value.trim();
-  const password = el("password").value;
-  const orgName = el("orgName").value.trim() || "My Organization";
-
-  const data = await api("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, orgName })
-  });
-
-  token = data.token;
-  localStorage.setItem("jwt", token);
-  setAuthStatus("Registered + logged in.");
-  await refreshClusters();
+function el(id) { return document.getElementById(id); }
+function msg(id, t) { el(id).textContent = t; }
+function requireAuth() {
+  const token = localStorage.getItem("token");
+  if (!token) window.location.href = "/login";
+}
+function logout() {
+  localStorage.removeItem("token");
+  window.location.href = "/login";
 }
 
-async function login() {
-  const email = el("email").value.trim();
-  const password = el("password").value;
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleString(); } catch { return iso || ""; }
+}
+function safe(obj) { return JSON.stringify(obj, null, 2); }
 
-  const data = await api("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password })
-  });
+// ---------- PROFILE (localStorage MVP) ----------
+const PROFILE_KEY = "profile_v1";
 
-  token = data.token;
-  localStorage.setItem("jwt", token);
-  setAuthStatus("Logged in.");
-  await refreshClusters();
+function getProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    return raw ? JSON.parse(raw) : { name: "", bio: "", avatar: "" };
+  } catch {
+    return { name: "", bio: "", avatar: "" };
+  }
+}
+function setProfile(p) {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
 }
 
-async function refreshClusters() {
-  if (!token) { setClusterStatus("Login first."); return; }
-  const data = await api("/api/app/clusters", { headers: authHeaders() });
-  const select = el("clusterSelect");
-  select.innerHTML = "";
-  (data.clusters || []).forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c.ID || c.id;
-    opt.textContent = `${c.Name || c.name}`;
-    select.appendChild(opt);
-  });
-  setClusterStatus(`Clusters loaded: ${(data.clusters || []).length}`);
+function applyAvatarTo(elm, avatarDataUrl) {
+  if (!elm) return;
+  if (avatarDataUrl) {
+    elm.classList.add("hasImg");
+    elm.style.backgroundImage = `url("${avatarDataUrl}")`;
+  } else {
+    elm.classList.remove("hasImg");
+    elm.style.backgroundImage = "";
+  }
+}
+
+function openProfileModal() {
+  const p = getProfile();
+  el("profileName").value = p.name || "";
+  el("profileBio").value = p.bio || "";
+  applyAvatarTo(el("avatarBig"), p.avatar || "");
+  applyAvatarTo(el("navAvatar"), p.avatar || "");
+  msg("profileStatus", "");
+  el("profileModal").classList.remove("hidden");
+  el("profileModal").setAttribute("aria-hidden", "false");
+}
+
+function closeProfileModal() {
+  el("profileModal").classList.add("hidden");
+  el("profileModal").setAttribute("aria-hidden", "true");
+}
+
+async function saveProfile() {
+  const p = getProfile();
+  p.name = (el("profileName").value || "").trim();
+  p.bio = (el("profileBio").value || "").trim();
+
+  const file = el("profileAvatar").files && el("profileAvatar").files[0];
+  if (file) {
+    // небольшой guard, чтобы не зафигачить гигабайт в localStorage
+    if (file.size > 2 * 1024 * 1024) {
+      msg("profileStatus", "Avatar too big (max 2MB for MVP)");
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ""));
+      fr.onerror = () => reject(new Error("read avatar failed"));
+      fr.readAsDataURL(file);
+    });
+    p.avatar = dataUrl;
+  }
+
+  setProfile(p);
+  applyAvatarTo(el("avatarBig"), p.avatar || "");
+  applyAvatarTo(el("navAvatar"), p.avatar || "");
+  msg("profileStatus", "Saved ✓");
+}
+
+// ---------- ME ----------
+async function loadMe() {
+  msg("meStatus", "Loading session…");
+  try {
+    const res = await api("/api/app/me");
+    msg("meStatus", "Session OK ✓");
+    el("meBox").textContent = safe(res);
+  } catch (e) {
+    msg("meStatus", e.message);
+  }
+}
+
+// ---------- CLUSTERS ----------
+async function loadClusters() {
+  try {
+    const res = await api("/api/app/clusters");
+    const sel = el("clusterSelect");
+    sel.innerHTML = "";
+
+    const clusters = res.clusters || [];
+    for (const c of clusters) {
+      const o = document.createElement("option");
+      o.value = c.ID || c.id;
+      o.textContent = c.Name || c.name;
+      sel.appendChild(o);
+    }
+
+    msg("clusterStatus", clusters.length ? "Clusters loaded ✓" : "No clusters yet");
+    if (sel.value) await loadScanHistory();
+  } catch (e) {
+    msg("clusterStatus", e.message);
+  }
 }
 
 async function createCluster() {
-  if (!token) { setClusterStatus("Login first."); return; }
+  try {
+    await api("/api/app/clusters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: el("clusterName").value,
+        notes: el("clusterNotes").value,
+      }),
+    });
+    msg("clusterStatus", "Cluster added ✓");
+    await loadClusters();
+  } catch (e) {
+    msg("clusterStatus", e.message);
+  }
+}
 
-  const name = el("clusterName").value.trim();
-  const notes = el("clusterNotes").value.trim();
-  if (!name) { setClusterStatus("Cluster name required."); return; }
+// ---------- SCANS ----------
+let lastScans = [];
+let selectedScanId = "";
+
+// report state (for toggle/download)
+let lastReportObj = null;
+let reportExpanded = false;
+
+function setSelectedScan(id) {
+  selectedScanId = id || "";
+  el("scanId").value = selectedScanId;
+
+  const body = el("historyBody");
+  body.querySelectorAll("tr[data-scan-id]").forEach(tr => {
+    tr.classList.toggle("trActive", tr.getAttribute("data-scan-id") === selectedScanId);
+  });
+}
+
+function renderHistory(scans) {
+  const body = el("historyBody");
+  body.innerHTML = "";
+  lastScans = scans || [];
+
+  if (!lastScans.length) {
+    body.innerHTML = `<tr><td colspan="4" class="muted">No scans yet</td></tr>`;
+    msg("historyMeta", "");
+    return;
+  }
+
+  msg("historyMeta", `${lastScans.length} scan(s)`);
+
+  for (const sc of lastScans) {
+    const id = sc.ID || sc.id || "";
+    const created = fmtDate(sc.CreatedAt || sc.createdAt);
+    const source = sc.Source || sc.source || "";
+
+    const tr = document.createElement("tr");
+    tr.setAttribute("data-scan-id", id);
+    tr.innerHTML = `
+      <td>${created}</td>
+      <td><span class="badge">${source || "—"}</span></td>
+      <td class="code">${id}</td>
+      <td>
+        <button class="btn secondary" data-act="select">Select</button>
+        <button class="btn" data-act="report">View</button>
+      </td>
+    `;
+
+    tr.addEventListener("click", (ev) => {
+      if (ev.target && ev.target.tagName === "BUTTON") return;
+      setSelectedScan(id);
+    });
+
+    tr.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const act = btn.getAttribute("data-act");
+        setSelectedScan(id);
+        if (act === "report") {
+          await loadReport();
+        }
+      });
+    });
+
+    body.appendChild(tr);
+  }
+
+  if (!selectedScanId) {
+    setSelectedScan(lastScans[0].ID || lastScans[0].id || "");
+  } else {
+    setSelectedScan(selectedScanId);
+  }
+}
+
+async function loadScanHistory() {
+  const clusterId = el("clusterSelect").value;
+  if (!clusterId) return;
 
   try {
-    const created = await api("/api/app/clusters", {
-      method: "POST",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ name, notes })
-    });
-    setClusterStatus(`Created: ${created.name || created.Name || created.id}`);
-    await refreshClusters();
+    msg("scanStatus", "");
+    const res = await api(`/api/app/scans?clusterId=${encodeURIComponent(clusterId)}`);
+    const scans = res.scans || [];
+    renderHistory(scans);
   } catch (e) {
-    setClusterStatus(String(e.message || e));
+    msg("scanStatus", e.message);
   }
 }
 
 async function uploadScan() {
-  if (!token) { setScanStatus("Login first."); return; }
+  const file = el("rbacFile").files[0];
   const clusterId = el("clusterSelect").value;
-  if (!clusterId) { setScanStatus("Create/select a cluster first."); return; }
 
-  const f = el("rbacFile").files && el("rbacFile").files[0];
-  if (!f) { setScanStatus("Choose rbac.yaml file first."); return; }
+  if (!file) { alert("Choose RBAC YAML file"); return; }
+  if (!clusterId) { alert("Select cluster first"); return; }
 
   const fd = new FormData();
+  fd.append("rbac", file);
   fd.append("clusterId", clusterId);
-  fd.append("rbac", f);
 
-  setScanStatus("Uploading & analyzing...");
-  const data = await api("/api/app/scans", {
-    method: "POST",
-    headers: authHeaders(),
-    body: fd
-  });
+  msg("scanStatus", "Uploading & analyzing…");
 
-  setJSON("summary", data.summary);
-  setText("scanId", data.scan.id || data.scan.ID);
-  setScanStatus(`Scan created: ${data.scan.id || data.scan.ID}`);
+  try {
+    const res = await api("/api/app/scans", { method: "POST", body: fd });
+    msg("scanStatus", "Scan uploaded ✓");
+    el("summary").textContent = safe(res.summary || res);
+
+    await loadScanHistory();
+    if (lastScans.length) {
+      setSelectedScan(lastScans[0].ID || lastScans[0].id || "");
+    }
+  } catch (e) {
+    msg("scanStatus", e.message);
+  }
 }
 
-async function loadHistory() {
-  if (!token) { setScanStatus("Login first."); return; }
-  const clusterId = el("clusterSelect").value;
-  if (!clusterId) { setScanStatus("Select a cluster."); return; }
+function renderReportBox() {
+  const box = el("report");
+  if (!lastReportObj) {
+    box.textContent = "No data";
+    return;
+  }
 
-  const data = await api(`/api/app/scans?clusterId=${encodeURIComponent(clusterId)}`, {
-    headers: authHeaders()
-  });
-  setJSON("history", data);
+  const full = safe(lastReportObj);
+
+  if (reportExpanded) {
+    box.textContent = full;
+    return;
+  }
+
+  // collapsed: show first N lines
+  const lines = full.split("\n");
+  const maxLines = 220;
+  if (lines.length <= maxLines) {
+    box.textContent = full;
+  } else {
+    box.textContent = lines.slice(0, maxLines).join("\n") + `\n\n… (${lines.length - maxLines} more lines hidden. Press Toggle)`;
+  }
 }
 
 async function loadReport() {
-  if (!token) { setScanStatus("Login first."); return; }
-  const scanId = el("scanId").value.trim();
-  if (!scanId) { setScanStatus("Enter scanId."); return; }
+  const id = (el("scanId").value || "").trim();
+  if (!id) { alert("Select scan from history first"); return; }
 
-  const data = await api(`/api/app/scan/report?scanId=${encodeURIComponent(scanId)}`, {
-    headers: authHeaders()
-  });
-  setJSON("report", data);
-  setScanStatus("Report loaded.");
+  try {
+    const res = await api(`/api/app/scan/report?scanId=${encodeURIComponent(id)}`);
+    lastReportObj = res.report || res;
+    reportExpanded = false; // default collapsed
+    renderReportBox();
+  } catch (e) {
+    el("report").textContent = e.message;
+  }
 }
 
-el("register").addEventListener("click", () => register().catch(e => setAuthStatus(String(e.message || e))));
-el("login").addEventListener("click", () => login().catch(e => setAuthStatus(String(e.message || e))));
-el("refreshClusters").addEventListener("click", () => refreshClusters().catch(e => setClusterStatus(String(e.message || e))));
-el("createCluster").addEventListener("click", () => createCluster().catch(e => setClusterStatus(String(e.message || e))));
-el("uploadScan").addEventListener("click", () => uploadScan().catch(e => setScanStatus(String(e.message || e))));
-el("loadScans").addEventListener("click", () => loadHistory().catch(e => setScanStatus(String(e.message || e))));
-el("loadReport").addEventListener("click", () => loadReport().catch(e => setScanStatus(String(e.message || e))));
-
-if (token) {
-  setAuthStatus("Token found. Refresh clusters.");
+async function loadLatestReport() {
+  if (!lastScans.length) {
+    alert("No scans yet");
+    return;
+  }
+  setSelectedScan(lastScans[0].ID || lastScans[0].id || "");
+  await loadReport();
 }
+
+function toggleReport() {
+  reportExpanded = !reportExpanded;
+  renderReportBox();
+}
+
+function downloadReport() {
+  if (!lastReportObj) {
+    alert("Load report first");
+    return;
+  }
+  const data = safe(lastReportObj);
+  const blob = new Blob([data], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  const sid = (el("scanId").value || "scan").trim();
+  a.download = `rbac-report-${sid}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+// ---------- INIT ----------
+window.addEventListener("DOMContentLoaded", async () => {
+  requireAuth();
+
+  // profile nav
+  const p = getProfile();
+  applyAvatarTo(el("navAvatar"), p.avatar || "");
+  el("profileBtn").onclick = openProfileModal;
+  el("closeProfile").onclick = closeProfileModal;
+  el("profileOverlay").onclick = closeProfileModal;
+  el("saveProfile").onclick = saveProfile;
+
+  // logout
+  el("logoutBtn").onclick = logout;
+
+  // clusters
+  el("createCluster").onclick = createCluster;
+  el("refreshClusters").onclick = loadClusters;
+
+  // scans
+  el("uploadScan").onclick = uploadScan;
+  el("loadScans").onclick = loadScanHistory;
+  el("loadReport").onclick = loadReport;
+  el("loadLatestReport").onclick = loadLatestReport;
+
+  // report tools
+  el("toggleReport").onclick = toggleReport;
+  el("downloadReport").onclick = downloadReport;
+
+  // misc
+  el("clearSummary").onclick = () => { el("summary").textContent = "No data"; };
+  el("clusterSelect").addEventListener("change", loadScanHistory);
+
+  await loadMe();
+  await loadClusters();
+});
