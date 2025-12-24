@@ -18,16 +18,38 @@ func (s *Server) handleAdminToggleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := parts[3]
-	if userID == "" {
-		http.Error(w, "user id required", http.StatusBadRequest)
+	adminID := GetUserID(r)
+	if adminID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	if err := s.Store.ToggleAdmin(r.Context(), userID); err != nil {
+	targetUserID := parts[3]
+
+	// 🚫 запрещаем self-revoke
+	if adminID == targetUserID {
+		http.Error(w, "cannot revoke admin from yourself", http.StatusBadRequest)
+		return
+	}
+
+	// 🔁 переключаем admin-флаг
+	if err := s.Store.ToggleAdmin(r.Context(), targetUserID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// 📝 логируем админ-действие
+	claims := GetClaims(r)
+	_ = s.Store.AddAdminAudit(
+		r.Context(),
+		adminID,
+		"toggle_admin",
+		"user",
+		targetUserID,
+		map[string]any{
+			"by_email": claims.Email,
+		},
+	)
 
 	w.WriteHeader(http.StatusNoContent)
 }

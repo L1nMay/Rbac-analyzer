@@ -72,6 +72,10 @@ func (s *Server) Routes() http.Handler {
 			RequireAdmin(http.HandlerFunc(s.handleAdminOrgs)),
 		),
 	)
+	mux.Handle(
+		"/api/admin/audit",
+		AuthMiddleware(jwtKey, RequireAdmin(http.HandlerFunc(s.handleAdminAudit))),
+	)
 
 	// Static site last
 	mux.Handle("/", s.Web)

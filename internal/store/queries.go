@@ -372,3 +372,87 @@ func (s *Store) ToggleAdmin(ctx context.Context, userID string) error {
 	)
 	return err
 }
+func (s *Store) AddAdminAuditLog(
+	ctx context.Context,
+	actorUserID string,
+	targetUserID string,
+	action string,
+) error {
+	_, err := s.DB.Exec(ctx,
+		`INSERT INTO admin_audit_log(actor_user_id, target_user_id, action)
+		 VALUES ($1,$2,$3)`,
+		actorUserID, targetUserID, action,
+	)
+	return err
+}
+
+type AdminAuditEvent struct {
+	ID          string
+	AdminUserID string
+	Action      string
+	TargetType  string
+	TargetID    string
+	Meta        map[string]any
+	CreatedAt   time.Time
+}
+
+func (s *Store) InsertAdminAudit(
+	ctx context.Context,
+	adminUserID string,
+	action string,
+	targetType string,
+	targetID string,
+	meta map[string]any,
+) error {
+	metaB, _ := json.Marshal(meta)
+
+	_, err := s.DB.Exec(ctx,
+		`INSERT INTO admin_audit_log
+		 (admin_user_id, action, target_type, target_id, meta)
+		 VALUES ($1,$2,$3,$4,$5)`,
+		adminUserID,
+		action,
+		targetType,
+		targetID,
+		metaB,
+	)
+	return err
+}
+
+func (s *Store) ListAdminAudit(ctx context.Context, limit int) ([]AdminAuditEvent, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, admin_user_id, action, target_type, target_id, meta, created_at
+		 FROM admin_audit_log
+		 ORDER BY created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminAuditEvent
+	for rows.Next() {
+		var e AdminAuditEvent
+		var metaB []byte
+		if err := rows.Scan(
+			&e.ID,
+			&e.AdminUserID,
+			&e.Action,
+			&e.TargetType,
+			&e.TargetID,
+			&metaB,
+			&e.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(metaB, &e.Meta)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

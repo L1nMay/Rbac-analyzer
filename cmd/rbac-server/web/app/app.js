@@ -32,19 +32,31 @@ function fmtDate(iso) {
 }
 function safe(obj) { return JSON.stringify(obj, null, 2); }
 
-// ---------- PROFILE (localStorage MVP) ----------
-const PROFILE_KEY = "profile_v1";
+function currentUserId() {
+  const t = localStorage.getItem("token");
+  if (!t) return "";
+  try {
+    return JSON.parse(atob(t.split(".")[1])).sub || "";
+  } catch {
+    return "";
+  }
+}
+
+function profileKey() {
+  const uid = currentUserId();
+  return uid ? `profile_v1:${uid}` : "profile_v1:anonymous";
+}
 
 function getProfile() {
   try {
-    const raw = localStorage.getItem(PROFILE_KEY);
+    const raw = localStorage.getItem(profileKey());
     return raw ? JSON.parse(raw) : { name: "", bio: "", avatar: "" };
   } catch {
     return { name: "", bio: "", avatar: "" };
   }
 }
 function setProfile(p) {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+  localStorage.setItem(profileKey(), JSON.stringify(p));
 }
 
 function applyAvatarTo(elm, avatarDataUrl) {
